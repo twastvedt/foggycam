@@ -110,7 +110,7 @@ class FoggyCam(object):
             request.add_header('Authorization', 'Basic %s' % self.nest_access_token)
 
             response = self.merlin.open(request)
-            session_data = response.read()
+            session_data = response.read().decode('utf-8')
 
             session_json = json.loads(session_data)
 
@@ -136,7 +136,7 @@ class FoggyCam(object):
 
         try:
             response = self.merlin.open(request)
-            session_data = response.read()
+            session_data = response.read().decode('utf-8')
             session_json = json.loads(session_data)
 
             self.nest_access_token = session_json['access_token']
@@ -177,7 +177,7 @@ class FoggyCam(object):
 
                     try:
                         response = self.merlin.open(request)
-                        pin_attempt = response.read()
+                        pin_attempt = response.read().decode('utf-8')
 
                         parsed_pin_attempt = json.loads(pin_attempt)
                         if parsed_pin_attempt["status"].lower() == "id_match_positive":
@@ -224,7 +224,7 @@ class FoggyCam(object):
         request.add_header('Content-Type', 'application/x-www-form-urlencoded')
 
         response = self.merlin.open(request)
-        session_data = response.read()
+        session_data = response.read().decode('utf-8')
 
         print (session_data)
 
@@ -247,7 +247,7 @@ class FoggyCam(object):
 
         response = self.merlin.open(request)
 
-        response_data = response.read()
+        response_data = response.read().decode('utf-8')
 
         print (response_data)
 
