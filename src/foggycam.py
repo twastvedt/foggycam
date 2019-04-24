@@ -14,6 +14,7 @@ import threading
 import time
 from datetime import datetime
 import subprocess
+from subprocess import call
 from azurestorageprovider import AzureStorageProvider
 import shutil
 
@@ -330,6 +331,11 @@ class FoggyCam(object):
                 with open(camera_path + '/' + file_id + '.jpg', 'wb') as image_file:
                     for chunk in response:
                         image_file.write(chunk)
+
+                #Add overlay text
+                now = datetime.now()
+                overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
+                call ([overlay_text], shell=True)
 
                 # Check if we need to compile a video
                 if config.produce_video:
