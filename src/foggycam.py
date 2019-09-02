@@ -158,7 +158,7 @@ class FoggyCam(object):
             print (cookie_data["cztoken"])
         except urllib.request.HTTPError as err:
             if err.code == 401:
-                error_message = err.read()
+                error_message = err.read().decode('utf-8')
                 unauth_content = json.loads(error_message)
 
                 if unauth_content["status"].lower() == "verification_pending":
