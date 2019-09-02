@@ -257,11 +257,13 @@ class FoggyCam(object):
             bucket_id = bucket['object_key']
             if bucket_id.startswith('quartz.'):
                 camera_id = bucket_id.replace('quartz.', '')
+                camera_description = bucket['value']['description']
                 print ('INFO: Detected camera configuration.')
                 print (bucket)
                 print ('INFO: Camera UUID:')
                 print (camera_id)
-                self.nest_camera_array.append(camera_id)
+                print (camera_description)
+                self.nest_camera_array.append({"id": camera_id, "name": camera_description})
 
     def capture_images(self, config=None):
         """Starts the multi-threaded image capture process."""
@@ -278,15 +280,19 @@ class FoggyCam(object):
         for camera in self.nest_camera_array:
             camera_path = ''
             video_path = ''
-
+            camera_id = camera.get("id")
+            camera_description = camera.get("name")
+            # If there is no label on the camera, just set it to the id. 
+            if not camera_description:
+                camera_description = camera_id
             # Determine whether the entries should be copied to a custom path
             # or not.
             if not config.path:
-                camera_path = os.path.join(self.local_path, 'capture', camera, 'images')
-                video_path = os.path.join(self.local_path, 'capture', camera, 'video')
+                camera_path = os.path.join(self.local_path, 'capture', camera_description, 'images')
+                video_path = os.path.join(self.local_path, 'capture', camera_description, 'video')
             else:
-                camera_path = os.path.join(config.path, 'capture', camera, 'images')
-                video_path = os.path.join(config.path, 'capture', camera, 'video')
+                camera_path = os.path.join(config.path, 'capture', camera_description, 'images')
+                video_path = os.path.join(config.path, 'capture', camera_description, 'video')
 
             # Provision the necessary folders for images and videos.
             if not os.path.exists(camera_path):
@@ -295,14 +301,14 @@ class FoggyCam(object):
             if not os.path.exists(video_path):
                 os.makedirs(video_path)
 
-            image_thread = threading.Thread(target=self.perform_capture, args=(config, camera, camera_path, video_path))
+            image_thread = threading.Thread(target=self.perform_capture, args=(config, camera_id, camera_path, video_path))
             image_thread.daemon = True
             image_thread.start()
 
         while True:
             time.sleep(1)
 
-    def perform_capture(self, config=None, camera=None, camera_path='', video_path=''):
+    def perform_capture(self, config=None, camera_id=None, camera_path='', video_path=''):
         """Captures images and generates the video from them."""
 
         camera_buffer = defaultdict(list)
@@ -315,7 +321,7 @@ class FoggyCam(object):
 
             print ('Applied cache buster: ', utc_millis_str)
 
-            image_url = self.nest_image_url.replace('#CAMERAID#', camera).replace('#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(config.width))
+            image_url = self.nest_image_url.replace('#CAMERAID#', camera_id).replace('#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(config.width))
 
             request = urllib.request.Request(image_url)
             request.add_header('accept', 'image/webp,image/apng,image/*,*/*;q=0.9')
@@ -339,19 +345,19 @@ class FoggyCam(object):
 
                 # Check if we need to compile a video
                 if config.produce_video:
-                    camera_buffer_size = len(camera_buffer[camera])
-                    print ('[', threading.current_thread().name, '] INFO: Camera buffer size for ', camera, ': ', camera_buffer_size)
+                    camera_buffer_size = len(camera_buffer[camera_id])
+                    print ('[', threading.current_thread().name, '] INFO: Camera buffer size for ', camera_id, ': ', camera_buffer_size)
 
                     if camera_buffer_size < self.nest_camera_buffer_threshold:
-                        camera_buffer[camera].append(file_id)
+                        camera_buffer[camera_id].append(file_id)
                     else:
                         camera_image_folder = os.path.join(self.local_path, camera_path)
 
                         # Build the batch of files that need to be made into a video.
                         file_declaration = ''
-                        for buffer_entry in camera_buffer[camera]:
+                        for buffer_entry in camera_buffer[camera_id]:
                             file_declaration = file_declaration + 'file \'' + camera_image_folder + '/' + buffer_entry + '.jpg\'\n'
-                        concat_file_name = os.path.join(self.temp_dir_path, camera + '.txt')
+                        concat_file_name = os.path.join(self.temp_dir_path, camera_id + '.txt')
 
                         # Make sure that the content is decoded
 
@@ -381,14 +387,14 @@ class FoggyCam(object):
 
                             if bool(config.upload_to_azure):
                                 print ('INFO: Uploading to Azure Storage...')
-                                target_blob = 'foggycam/' + camera + '/' + file_id + '.mp4'
+                                target_blob = 'foggycam/' + camera_id + '/' + file_id + '.mp4'
                                 storage_provider.upload_video(account_name=config.az_account_name, sas_token=config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
                                 print ('INFO: Upload complete.')
 
                             # If the user specified the need to remove images post-processing
                             # then clear the image folder from images in the buffer.
                             if config.clear_images:
-                                for buffer_entry in camera_buffer[camera]:
+                                for buffer_entry in camera_buffer[camera_id]:
                                     deletion_target = os.path.join(camera_path, buffer_entry + '.jpg')
                                     print ('INFO: Deleting ' + deletion_target)
                                     os.remove(deletion_target)
@@ -397,7 +403,7 @@ class FoggyCam(object):
 
                         # Empty buffer, since we no longer need the file records that we're planning
                         # to compile in a video.
-                        camera_buffer[camera] = []
+                        camera_buffer[camera_id] = []
             except urllib.request.HTTPError as err:
                 if err.code == 403:
                     self.initialize_session()
