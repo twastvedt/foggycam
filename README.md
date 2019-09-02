@@ -39,6 +39,17 @@ On macOS, you can install `ffmpeg` through [Homebrew](https://brew.sh):
 brew install ffmpeg
 ```
 
+For timestamp functionality you'll need `imagemagick`:
+
+```
+sudo apt-get install imagemagick
+```
+
+On macOS, you can install `imagemagick` through Homebrew as well:
+
+```
+brew install imagemagick
+```
 ## How To Start
 
 Make sure you install the requirements for the project, by `cd`-ing in the folder with the project, and running:
