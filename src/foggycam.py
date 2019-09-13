@@ -340,7 +340,7 @@ class FoggyCam(object):
 
                 #Add overlay text
                 now = datetime.now()
-                overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
+                overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -font Liberation-Sans -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
                 call ([overlay_text], shell=True)
 
                 # Check if we need to compile a video

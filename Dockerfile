@@ -2,7 +2,7 @@ FROM python:alpine
 # Install.
 RUN \
   apk add --update && \
-  apk add  --no-cache build-base  py-pip  libffi-dev openssl-dev py-pip  && \
+  apk add  --no-cache build-base  py-pip  libffi-dev openssl-dev py-pip ffmpeg imagemagick ttf-liberation && \
   pip install --upgrade pip && \
   rm -rf /var/cache/apk/* 
 
