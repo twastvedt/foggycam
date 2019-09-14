@@ -15,7 +15,6 @@ import time
 from datetime import datetime
 import subprocess
 from subprocess import call
-from azurestorageprovider import AzureStorageProvider
 import shutil
 
 
@@ -54,6 +53,9 @@ class FoggyCam(object):
     def __init__(self, config):
         self.config = config
         frame_time = 1 / config.frame_rate
+
+        if config.upload_to_azure:
+            from azurestorageprovider import AzureStorageProvider
 
         self.cookie_jar = CookieJar()
         self.merlin = urllib.request.build_opener(
