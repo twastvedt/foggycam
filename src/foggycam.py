@@ -46,11 +46,15 @@ class FoggyCam(object):
     merlin = None
     temp_dir_path = ''
     local_path = ''
+    last_frame = None
+    frame_time = None
 
     config = None
 
     def __init__(self, config):
         self.config = config
+        frame_time = 1 / config.frame_rate
+
         self.cookie_jar = CookieJar()
         self.merlin = urllib.request.build_opener(
             urllib.request.HTTPCookieProcessor(self.cookie_jar))
@@ -327,101 +331,117 @@ class FoggyCam(object):
         while self.is_capturing:
             file_id = str(uuid.uuid4().hex)
 
-            utc_date = datetime.utcnow()
-            utc_millis_str = str(int(utc_date.timestamp())*1000)
+            image = self.get_image(camera)
 
-            print ('Applied cache buster: ', utc_millis_str)
+            with open(camera_path + '/' + file_id + '.jpg', 'wb') as image_file:
+                for chunk in image:
+                    image_file.write(chunk)
 
-            image_url = self.nest_image_url.replace('#CAMERAID#', camera).replace('#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config.width))
+            #Add overlay text
+            now = datetime.now()
+            overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
+            call ([overlay_text], shell=True)
 
-            request = urllib.request.Request(image_url)
-            request.add_header('accept', 'image/webp,image/apng,image/*,*/*;q=0.9')
-            request.add_header('accept-encoding', 'gzip, deflate, br')
-            request.add_header('user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36')
-            request.add_header('referer','https://home.nest.com/')
-            request.add_header('authority','nexusapi-us1.camera.home.nest.com')
+            # Check if we need to compile a video
+            if self.config.produce_video:
+                camera_buffer_size = len(camera_buffer[camera])
+                print ('[', threading.current_thread().name, '] INFO: Camera buffer size for ', camera, ': ', camera_buffer_size)
 
-            try:
-                response = self.merlin.open(request)
-                time.sleep(1 / self.config.frame_rate)
+                if camera_buffer_size < self.nest_camera_buffer_threshold:
+                    camera_buffer[camera].append(file_id)
+                else:
+                    camera_image_folder = os.path.join(self.local_path, camera_path)
 
-                with open(camera_path + '/' + file_id + '.jpg', 'wb') as image_file:
-                    for chunk in response:
-                        image_file.write(chunk)
+                    # Build the batch of files that need to be made into a video.
+                    file_declaration = ''
+                    for buffer_entry in camera_buffer[camera]:
+                        file_declaration = file_declaration + 'file \'' + camera_image_folder + '/' + buffer_entry + '.jpg\'\n'
+                    concat_file_name = os.path.join(self.temp_dir_path, camera + '.txt')
 
-                #Add overlay text
-                now = datetime.now()
-                overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
-                call ([overlay_text], shell=True)
+                    # Make sure that the content is decoded
 
-                # Check if we need to compile a video
-                if self.config.produce_video:
-                    camera_buffer_size = len(camera_buffer[camera])
-                    print ('[', threading.current_thread().name, '] INFO: Camera buffer size for ', camera, ': ', camera_buffer_size)
+                    with open(concat_file_name, 'w') as declaration_file:
+                        declaration_file.write(file_declaration)
 
-                    if camera_buffer_size < self.nest_camera_buffer_threshold:
-                        camera_buffer[camera].append(file_id)
+                    # Check if we have ffmpeg locally
+                    use_terminal = False
+                    ffmpeg_path = ''
+
+                    if shutil.which("ffmpeg"):
+                        ffmpeg_path = 'ffmpeg'
+                        use_terminal = True
                     else:
-                        camera_image_folder = os.path.join(self.local_path, camera_path)
+                        ffmpeg_path = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'tools', 'ffmpeg'))
+                    
+                    if use_terminal or (os.path.isfile(ffmpeg_path) and use_terminal is False):
+                        print ('INFO: Found ffmpeg. Processing video!')
+                        target_video_path = os.path.join(video_path, file_id + '.mp4')
+                        process = Popen([ffmpeg_path, '-r', str(self.config.frame_rate), '-f', 'concat', '-safe', '0', '-i', concat_file_name, '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
+                        process.communicate()
+                        os.remove(concat_file_name)
+                        print ('INFO: Video processing is complete!')
 
-                        # Build the batch of files that need to be made into a video.
-                        file_declaration = ''
-                        for buffer_entry in camera_buffer[camera]:
-                            file_declaration = file_declaration + 'file \'' + camera_image_folder + '/' + buffer_entry + '.jpg\'\n'
-                        concat_file_name = os.path.join(self.temp_dir_path, camera + '.txt')
+                        # Upload the video
+                        storage_provider = AzureStorageProvider()
 
-                        # Make sure that the content is decoded
+                        if bool(self.config.upload_to_azure):
+                            print ('INFO: Uploading to Azure Storage...')
+                            target_blob = 'foggycam/' + camera + '/' + file_id + '.mp4'
+                            storage_provider.upload_video(account_name=self.config.az_account_name, sas_token=self.config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
+                            print ('INFO: Upload complete.')
 
-                        with open(concat_file_name, 'w') as declaration_file:
-                            declaration_file.write(file_declaration)
+                        # If the user specified the need to remove images post-processing
+                        # then clear the image folder from images in the buffer.
+                        if self.config.clear_images:
+                            for buffer_entry in camera_buffer[camera]:
+                                deletion_target = os.path.join(camera_path, buffer_entry + '.jpg')
+                                print ('INFO: Deleting ' + deletion_target)
+                                os.remove(deletion_target)
+                    else:
+                        print ('WARNING: No ffmpeg detected. Make sure the binary is in /tools.')
 
-                        # Check if we have ffmpeg locally
-                        use_terminal = False
-                        ffmpeg_path = ''
+                    # Empty buffer, since we no longer need the file records that we're planning
+                    # to compile in a video.
+                    camera_buffer[camera] = []
 
-                        if shutil.which("ffmpeg"):
-                            ffmpeg_path = 'ffmpeg'
-                            use_terminal = True
-                        else:
-                            ffmpeg_path = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'tools', 'ffmpeg'))
-                        
-                        if use_terminal or (os.path.isfile(ffmpeg_path) and use_terminal is False):
-                            print ('INFO: Found ffmpeg. Processing video!')
-                            target_video_path = os.path.join(video_path, file_id + '.mp4')
-                            process = Popen([ffmpeg_path, '-r', str(self.config.frame_rate), '-f', 'concat', '-safe', '0', '-i', concat_file_name, '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
-                            process.communicate()
-                            os.remove(concat_file_name)
-                            print ('INFO: Video processing is complete!')
+    def get_image(self, camera=None):
+        """Generate image and video from cam."""
 
-                            # Upload the video
-                            storage_provider = AzureStorageProvider()
+        utc_date = datetime.utcnow()
+        utc_millis_str = str(int(utc_date.timestamp())*1000)
 
-                            if bool(self.config.upload_to_azure):
-                                print ('INFO: Uploading to Azure Storage...')
-                                target_blob = 'foggycam/' + camera + '/' + file_id + '.mp4'
-                                storage_provider.upload_video(account_name=self.config.az_account_name, sas_token=self.config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
-                                print ('INFO: Upload complete.')
+        print('Applied cache buster: ', utc_millis_str)
 
-                            # If the user specified the need to remove images post-processing
-                            # then clear the image folder from images in the buffer.
-                            if self.config.clear_images:
-                                for buffer_entry in camera_buffer[camera]:
-                                    deletion_target = os.path.join(camera_path, buffer_entry + '.jpg')
-                                    print ('INFO: Deleting ' + deletion_target)
-                                    os.remove(deletion_target)
-                        else:
-                            print ('WARNING: No ffmpeg detected. Make sure the binary is in /tools.')
+        image_url = self.nest_image_url.replace('#CAMERAID#', camera).replace(
+            '#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config.width))
 
-                        # Empty buffer, since we no longer need the file records that we're planning
-                        # to compile in a video.
-                        camera_buffer[camera] = []
-            except urllib.request.HTTPError as err:
-                if err.code == 403:
-                    self.initialize_session()
-                    self.login()
-                    self.initialize_user()
-            except Exception:
-                print ('ERROR: Could not download image from URL:')
-                print (image_url)
+        request = urllib.request.Request(image_url)
+        request.add_header('accept', 'image/webp,image/apng,image/*,*/*;q=0.9')
+        request.add_header('accept-encoding', 'gzip, deflate, br')
+        request.add_header(
+            'user-agent', 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_4) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/66.0.3359.181 Safari/537.36')
+        request.add_header('referer', 'https://home.nest.com/')
+        request.add_header('authority', 'nexusapi-us1.camera.home.nest.com')
 
-                traceback.print_exc()
+        try:
+            response = self.merlin.open(request)
+
+            now = time.process_time()
+
+            if self.last_frame:
+                time.sleep(min(0, self.frame_time - (now - self.last_frame)))
+
+            self.last_frame = now
+
+            return response
+
+        except urllib.request.HTTPError as err:
+            if err.code == 403:
+                self.initialize_session()
+                self.login()
+                self.initialize_user()
+        except Exception:
+            print('ERROR: Could not download image from URL:')
+            print(image_url)
+
+            traceback.print_exc()
