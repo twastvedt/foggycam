@@ -9,11 +9,14 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
 
+to_exit = False
+
 
 def quit(sig, frame):
     print("Exiting server...")
     global to_exit
     to_exit = True
+    exit(0)
 
 
 signal.signal(signal.SIGINT, quit)
@@ -31,7 +34,7 @@ class CamHandler(BaseHTTPRequestHandler):
         global to_exit
 
         while not to_exit:
-            jpg = cam.get_image(self.cam.nest_camera_array[0])
+            jpg = self.cam.get_image(self.cam.nest_camera_array[0])
 
             jpg_bytes = jpg.tobytes()
 
