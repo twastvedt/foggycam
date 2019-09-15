@@ -33,17 +33,25 @@ class CamHandler(BaseHTTPRequestHandler):
         self.end_headers()
         global to_exit
 
+        print('do_GET')
+
         while not to_exit:
-            jpg = self.cam.get_image(self.cam.nest_camera_array[0])
+            response = self.cam.get_image(self.cam.nest_camera_array[0])
 
-            jpg_bytes = jpg.tobytes()
+            if response:
+                try:
+                    self.wfile.write(str.encode("\r\n--jpgboundary\r\n"))
+                    self.send_header('Content-type', 'image/jpeg')
+                    self.send_header('Content-length', response.length)
+                    self.end_headers()
 
-            self.wfile.write(str.encode("\r\n--jpgboundary\r\n"))
-            self.send_header('Content-type', 'image/jpeg')
-            self.send_header('Content-length', len(jpg_bytes))
-            self.end_headers()
+                    self.wfile.write(response.read())
 
-            jpg.save(self.wfile, 'JPEG')
+                except Exception as e:
+                    print(f'ERROR: {e}')
+
+            else:
+                print('Empty response')
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):

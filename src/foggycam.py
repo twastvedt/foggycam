@@ -45,14 +45,17 @@ class FoggyCam(object):
     merlin = None
     temp_dir_path = ''
     local_path = ''
+
     last_frame = None
     frame_time = None
+    start_time = None
+    frame_count = 0
 
     config = None
 
     def __init__(self, config):
         self.config = config
-        frame_time = 1 / config.frame_rate
+        self.frame_time = 1 / config.frame_rate
 
         if config.upload_to_azure:
             from azurestorageprovider import AzureStorageProvider
@@ -326,7 +329,7 @@ class FoggyCam(object):
             time.sleep(1)
 
     def perform_capture(self, camera=None, camera_path='', video_path=''):
-        """Captures images and generates the video from them."""
+        """Save image and video files."""
 
         camera_buffer = defaultdict(list)
 
@@ -339,26 +342,32 @@ class FoggyCam(object):
                 for chunk in image:
                     image_file.write(chunk)
 
-            #Add overlay text
+            # Add overlay text
             now = datetime.now()
-            overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'
-            call ([overlay_text], shell=True)
+            overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -annotate +40+40 '" + \
+                now.strftime("%Y-%m-%d %H:%M:%S") + "' " + \
+                camera_path + '/' + file_id + '.jpg'
+            call([overlay_text], shell=True)
 
             # Check if we need to compile a video
             if self.config.produce_video:
                 camera_buffer_size = len(camera_buffer[camera])
-                print ('[', threading.current_thread().name, '] INFO: Camera buffer size for ', camera, ': ', camera_buffer_size)
+                print('[', threading.current_thread(
+                ).name, '] INFO: Camera buffer size for ', camera, ': ', camera_buffer_size)
 
                 if camera_buffer_size < self.nest_camera_buffer_threshold:
                     camera_buffer[camera].append(file_id)
                 else:
-                    camera_image_folder = os.path.join(self.local_path, camera_path)
+                    camera_image_folder = os.path.join(
+                        self.local_path, camera_path)
 
                     # Build the batch of files that need to be made into a video.
                     file_declaration = ''
                     for buffer_entry in camera_buffer[camera]:
-                        file_declaration = file_declaration + 'file \'' + camera_image_folder + '/' + buffer_entry + '.jpg\'\n'
-                    concat_file_name = os.path.join(self.temp_dir_path, camera + '.txt')
+                        file_declaration = file_declaration + 'file \'' + \
+                            camera_image_folder + '/' + buffer_entry + '.jpg\'\n'
+                    concat_file_name = os.path.join(
+                        self.temp_dir_path, camera + '.txt')
 
                     # Make sure that the content is decoded
 
@@ -373,46 +382,52 @@ class FoggyCam(object):
                         ffmpeg_path = 'ffmpeg'
                         use_terminal = True
                     else:
-                        ffmpeg_path = os.path.abspath(os.path.join(os.path.dirname( __file__ ), '..', 'tools', 'ffmpeg'))
-                    
+                        ffmpeg_path = os.path.abspath(os.path.join(
+                            os.path.dirname(__file__), '..', 'tools', 'ffmpeg'))
+
                     if use_terminal or (os.path.isfile(ffmpeg_path) and use_terminal is False):
-                        print ('INFO: Found ffmpeg. Processing video!')
-                        target_video_path = os.path.join(video_path, file_id + '.mp4')
-                        process = Popen([ffmpeg_path, '-r', str(self.config.frame_rate), '-f', 'concat', '-safe', '0', '-i', concat_file_name, '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
+                        print('INFO: Found ffmpeg. Processing video!')
+                        target_video_path = os.path.join(
+                            video_path, file_id + '.mp4')
+                        process = Popen([ffmpeg_path, '-r', str(self.config.frame_rate), '-f', 'concat', '-safe', '0', '-i', concat_file_name,
+                                         '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
                         process.communicate()
                         os.remove(concat_file_name)
-                        print ('INFO: Video processing is complete!')
+                        print('INFO: Video processing is complete!')
 
                         # Upload the video
                         storage_provider = AzureStorageProvider()
 
                         if bool(self.config.upload_to_azure):
-                            print ('INFO: Uploading to Azure Storage...')
+                            print('INFO: Uploading to Azure Storage...')
                             target_blob = 'foggycam/' + camera + '/' + file_id + '.mp4'
-                            storage_provider.upload_video(account_name=self.config.az_account_name, sas_token=self.config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
-                            print ('INFO: Upload complete.')
+                            storage_provider.upload_video(
+                                account_name=self.config.az_account_name, sas_token=self.config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
+                            print('INFO: Upload complete.')
 
                         # If the user specified the need to remove images post-processing
                         # then clear the image folder from images in the buffer.
                         if self.config.clear_images:
                             for buffer_entry in camera_buffer[camera]:
-                                deletion_target = os.path.join(camera_path, buffer_entry + '.jpg')
-                                print ('INFO: Deleting ' + deletion_target)
+                                deletion_target = os.path.join(
+                                    camera_path, buffer_entry + '.jpg')
+                                print('INFO: Deleting ' + deletion_target)
                                 os.remove(deletion_target)
                     else:
-                        print ('WARNING: No ffmpeg detected. Make sure the binary is in /tools.')
+                        print(
+                            'WARNING: No ffmpeg detected. Make sure the binary is in /tools.')
 
                     # Empty buffer, since we no longer need the file records that we're planning
                     # to compile in a video.
                     camera_buffer[camera] = []
 
     def get_image(self, camera=None):
-        """Generate image and video from cam."""
+        """Generate image from cam."""
 
         utc_date = datetime.utcnow()
         utc_millis_str = str(int(utc_date.timestamp())*1000)
 
-        print('Applied cache buster: ', utc_millis_str)
+        # print('Applied cache buster: ', utc_millis_str)
 
         image_url = self.nest_image_url.replace('#CAMERAID#', camera).replace(
             '#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config.width))
@@ -426,14 +441,25 @@ class FoggyCam(object):
         request.add_header('authority', 'nexusapi-us1.camera.home.nest.com')
 
         try:
-            response = self.merlin.open(request)
+            now = time.time()
+            self.frame_count += 1
 
-            now = time.process_time()
+            actual_frame_time = 10
 
             if self.last_frame:
-                time.sleep(min(0, self.frame_time - (now - self.last_frame)))
+                actual_frame_time = now - self.last_frame
+                print(actual_frame_time)
+                sleep_time = self.frame_time - actual_frame_time
+
+                if sleep_time > 0:
+                    print(f'Sleep{sleep_time}')
+                    time.sleep(sleep_time)
+            else:
+                self.start_time = now
 
             self.last_frame = now
+
+            response = self.merlin.open(request, timeout=3 * actual_frame_time)
 
             return response
 
@@ -443,7 +469,6 @@ class FoggyCam(object):
                 self.login()
                 self.initialize_user()
         except Exception:
-            print('ERROR: Could not download image from URL:')
-            print(image_url)
+            print(f'ERROR: Could not download image from URL: {image_url}')
 
             traceback.print_exc()
