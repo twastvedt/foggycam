@@ -2,18 +2,20 @@ FROM python:alpine
 # Install.
 RUN \
   apk add --update && \
-  apk add  --no-cache build-base  py-pip  libffi-dev openssl-dev py-pip ffmpeg imagemagick ttf-liberation && \
+  apk add  --no-cache build-base py-pip libffi-dev openssl-dev && \
   pip install --upgrade pip && \
+  pip install --user pipenv --no-warn-script-location && \
   rm -rf /var/cache/apk/* 
 
 ADD ./src/ /apps/src
 ADD ./config.json /apps/
 
-RUN pip3 install -r /apps/src/requirements.txt
-# Set environment variables.
-ENV HOME /root
-
 # Define working directory.
 WORKDIR /apps/src
 
-ENTRYPOINT ["python", "start.py"] 
+RUN /root/.local/bin/pipenv install
+
+# Set environment variables.
+ENV HOME /root
+
+ENTRYPOINT ["/root/.local/bin/pipenv", "run", "python", "startServer.py"] 
