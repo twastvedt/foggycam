@@ -35,8 +35,10 @@ class CamHandler(BaseHTTPRequestHandler):
 
         print('do_GET')
 
+        camera_id = self.cam.nest_camera_array[0].get("id")
+
         while not to_exit:
-            response = self.cam.get_image(self.cam.nest_camera_array[0])
+            response = self.cam.get_image(camera_id)
 
             if response:
                 try:
