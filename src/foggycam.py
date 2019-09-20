@@ -17,7 +17,6 @@ import subprocess
 from subprocess import call
 import shutil
 
-
 class FoggyCam(object):
     """FoggyCam client class that performs capture operations."""
 
@@ -53,8 +52,12 @@ class FoggyCam(object):
 
     config = None
 
+    def set_framerate(self, fps):
+        self.config.frame_rate = fps
+        self.frame_time = 1 / self.config.frame_rate
+
     def __init__(self, config):
-        self.config = config
+        self.config = config._asdict()
         self.frame_time = 1 / config.frame_rate
 
         if config.upload_to_azure:
