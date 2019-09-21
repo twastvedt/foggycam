@@ -44,7 +44,7 @@ class CamHandler(BaseHTTPRequestHandler):
                     print(message)
                     self.wfile.write(str.encode(message))
 
-                    self.cam.set_framerate(int(value[0]))
+                    self.cam.set_framerate(float(value[0]))
 
         elif url_parts.path == '/':
             self.send_response(200)
@@ -55,8 +55,19 @@ class CamHandler(BaseHTTPRequestHandler):
 
             camera_id = self.cam.nest_camera_array[0].get("id")
 
+            frame_marker = time.time()
+
             while not to_exit:
+
+                print(f'\nStart frame')
+
+                start_time = time.time()
+
                 response = self.cam.get_image(camera_id)
+
+                print(f' Got image:  {(time.time() - start_time):.3f}')
+
+                start_time = time.time()
 
                 if response:
                     try:
@@ -72,15 +83,19 @@ class CamHandler(BaseHTTPRequestHandler):
                                 break
                             self.wfile.write(data)
 
+                        print(f' Sent image: {(time.time() - start_time):.3f}')
+
                     except socket.error as e:
-                        print(f'Closing due to socket error: {e}')
-                        return
+                        print(f'Socket error: {e}')
 
                     except Exception as e:
                         print(f'ERROR: {e}')
 
                 else:
                     print('Empty response')
+
+                print(f' Frame time: {time.time() - frame_marker:.3f}')
+                frame_marker = time.time()
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):

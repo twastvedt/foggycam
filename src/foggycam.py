@@ -17,6 +17,7 @@ import subprocess
 from subprocess import call
 import shutil
 
+
 class FoggyCam(object):
     """FoggyCam client class that performs capture operations."""
 
@@ -53,14 +54,14 @@ class FoggyCam(object):
     config = None
 
     def set_framerate(self, fps):
-        self.config.frame_rate = fps
-        self.frame_time = 1 / self.config.frame_rate
+        self.config["frame_rate"] = fps
+        self.frame_time = 1 / self.config["frame_rate"]
 
     def __init__(self, config):
         self.config = config._asdict()
-        self.frame_time = 1 / config.frame_rate
+        self.frame_time = 1 / self.config["frame_rate"]
 
-        if config.upload_to_azure:
+        if self.config["upload_to_azure"]:
             from azurestorageprovider import AzureStorageProvider
 
         self.cookie_jar = CookieJar()
@@ -141,8 +142,8 @@ class FoggyCam(object):
 
         print('INFO: Initializing session...')
 
-        payload = {'email': self.config.username,
-                   'password': self.config.password}
+        payload = {'email': self.config["username"],
+                   'password': self.config["password"]}
         binary_data = json.dumps(payload).encode('utf-8')
 
         request = urllib.request.Request(self.nest_session_url, binary_data)
@@ -286,8 +287,9 @@ class FoggyCam(object):
                 print(bucket)
                 print('INFO: Camera UUID:')
                 print(camera_id)
-                print (camera_description)
-                self.nest_camera_array.append({"id": camera_id, "name": camera_description})
+                print(camera_description)
+                self.nest_camera_array.append(
+                    {"id": camera_id, "name": camera_description})
 
     def capture_images(self):
         """Starts the multi-threaded image capture process."""
@@ -299,7 +301,7 @@ class FoggyCam(object):
         if not os.path.exists('capture'):
             os.makedirs('capture')
 
-        self.nest_camera_buffer_threshold = self.config.threshold
+        self.nest_camera_buffer_threshold = self.config["threshold"]
 
         for camera in self.nest_camera_array:
             camera_path = ''
@@ -307,20 +309,26 @@ class FoggyCam(object):
 
             camera_id = camera.get("id")
             camera_description = camera.get("name")
-            # If there is no label on the camera, just set it to the id. 
+            # If there is no label on the camera, just set it to the id.
             if not camera_description:
                 camera_description = camera_id
 
             # Determine whether the entries should be copied to a custom path
             # or not.
-            if not self.config.path:
-                camera_path = os.path.join(self.local_path, 'capture', camera, 'images')
-                video_path = os.path.join(self.local_path, 'capture', camera, 'video')
-                camera_path = os.path.join(self.local_path, 'capture', camera_description, 'images')
-                video_path = os.path.join(self.local_path, 'capture', camera_description, 'video')
+            if not self.config["path"]:
+                camera_path = os.path.join(
+                    self.local_path, 'capture', camera, 'images')
+                video_path = os.path.join(
+                    self.local_path, 'capture', camera, 'video')
+                camera_path = os.path.join(
+                    self.local_path, 'capture', camera_description, 'images')
+                video_path = os.path.join(
+                    self.local_path, 'capture', camera_description, 'video')
             else:
-                camera_path = os.path.join(config.path, 'capture', camera_description, 'images')
-                video_path = os.path.join(config.path, 'capture', camera_description, 'video')
+                camera_path = os.path.join(
+                    config["path"], 'capture', camera_description, 'images')
+                video_path = os.path.join(
+                    config["path"], 'capture', camera_description, 'video')
 
             # Provision the necessary folders for images and videos.
             if not os.path.exists(camera_path):
@@ -353,11 +361,13 @@ class FoggyCam(object):
 
             # Add overlay text
             now = datetime.now()
-            overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -font Liberation-Sans -annotate +40+40 '" + now.strftime("%Y-%m-%d %H:%M:%S") + "' " + camera_path + '/' + file_id + '.jpg'            
+            overlay_text = "/usr/bin/convert " + camera_path + '/' + file_id + '.jpg' + " -pointsize 36 -fill white -stroke black -font Liberation-Sans -annotate +40+40 '" + \
+                now.strftime("%Y-%m-%d %H:%M:%S") + "' " + \
+                camera_path + '/' + file_id + '.jpg'
             call([overlay_text], shell=True)
 
             # Check if we need to compile a video
-            if self.config.produce_video:
+            if self.config["produce_video"]:
                 camera_buffer_size = len(camera_buffer[camera_id])
                 print('[', threading.current_thread(
                 ).name, '] INFO: Camera buffer size for ', camera_id, ': ', camera_buffer_size)
@@ -396,7 +406,7 @@ class FoggyCam(object):
                         print('INFO: Found ffmpeg. Processing video!')
                         target_video_path = os.path.join(
                             video_path, file_id + '.mp4')
-                        process = Popen([ffmpeg_path, '-r', str(self.config.frame_rate), '-f', 'concat', '-safe', '0', '-i', concat_file_name,
+                        process = Popen([ffmpeg_path, '-r', str(self.config["frame_rate"]), '-f', 'concat', '-safe', '0', '-i', concat_file_name,
                                          '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
                         process.communicate()
                         os.remove(concat_file_name)
@@ -405,16 +415,16 @@ class FoggyCam(object):
                         # Upload the video
                         storage_provider = AzureStorageProvider()
 
-                        if bool(self.config.upload_to_azure):
+                        if bool(self.config["upload_to_azure"]):
                             print('INFO: Uploading to Azure Storage...')
                             target_blob = 'foggycam/' + camera_id + '/' + file_id + '.mp4'
                             storage_provider.upload_video(
-                                account_name=self.config.az_account_name, sas_token=self.config.az_sas_token, container='foggycam', blob=target_blob, path=target_video_path)
+                                account_name=self.config["az_account_name"], sas_token=self.config["az_sas_token"], container='foggycam', blob=target_blob, path=target_video_path)
                             print('INFO: Upload complete.')
 
                         # If the user specified the need to remove images post-processing
                         # then clear the image folder from images in the buffer.
-                        if self.config.clear_images:
+                        if self.config["clear_images"]:
                             for buffer_entry in camera_buffer[camera_id]:
                                 deletion_target = os.path.join(
                                     camera_path, buffer_entry + '.jpg')
@@ -437,7 +447,7 @@ class FoggyCam(object):
         # print('Applied cache buster: ', utc_millis_str)
 
         image_url = self.nest_image_url.replace('#CAMERAID#', camera_id).replace(
-            '#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config.width))
+            '#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config["width"]))
 
         request = urllib.request.Request(image_url)
         request.add_header('accept', 'image/webp,image/apng,image/*,*/*;q=0.9')
@@ -448,25 +458,22 @@ class FoggyCam(object):
         request.add_header('authority', 'nexusapi-us1.camera.home.nest.com')
 
         try:
-            now = time.time()
             self.frame_count += 1
 
-            actual_frame_time = 10
+            response = self.merlin.open(request, timeout=3)
 
             if self.last_frame:
-                actual_frame_time = now - self.last_frame
-                print(actual_frame_time)
+                actual_frame_time = time.time() - self.last_frame
+
+                print(f' Since last: {actual_frame_time:.3f}')
+
                 sleep_time = self.frame_time - actual_frame_time
 
                 if sleep_time > 0:
-                    print(f'Sleep{sleep_time}')
+                    print(f' Sleep:      {sleep_time:.3f}')
                     time.sleep(sleep_time)
-            else:
-                self.start_time = now
 
-            self.last_frame = now
-
-            response = self.merlin.open(request, timeout=3 * actual_frame_time)
+            self.last_frame = time.time()
 
             return response
 
@@ -475,7 +482,12 @@ class FoggyCam(object):
                 self.initialize_session()
                 self.login()
                 self.initialize_user()
+
+            self.last_frame = None
+
         except Exception:
             print(f'ERROR: Could not download image from URL: {image_url}')
 
             traceback.print_exc()
+
+            self.last_frame = None
