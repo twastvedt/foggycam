@@ -46,7 +46,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
                     self.cam.set_framerate(float(value[0]))
 
-        elif url_parts.path == '/':
+        elif url_parts.path.endswith('video'):
             self.send_response(200)
             self.send_header(
                 'Content-type', 'multipart/x-mixed-replace; boundary=jpgboundary')
