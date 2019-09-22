@@ -63,7 +63,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
             while not to_exit:
 
-                print(f'\nStart frame ({CamHandler.active_threads} threads})')
+                print(f'\nStart frame ({CamHandler.active_threads} threads)')
 
                 start_time = time.time()
 
