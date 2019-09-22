@@ -25,6 +25,8 @@ signal.signal(signal.SIGINT, quit)
 
 class CamHandler(BaseHTTPRequestHandler):
 
+    active_threads = 0
+
     cam = None
 
     def do_GET(self):
@@ -47,6 +49,8 @@ class CamHandler(BaseHTTPRequestHandler):
                     self.cam.set_framerate(float(value[0]))
 
         elif url_parts.path.endswith('video'):
+            CamHandler.active_threads += 1
+
             self.send_response(200)
             self.send_header(
                 'Content-type', 'multipart/x-mixed-replace; boundary=jpgboundary')
@@ -59,7 +63,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
             while not to_exit:
 
-                print(f'\nStart frame')
+                print(f'\nStart frame ({CamHandler.active_threads} threads})')
 
                 start_time = time.time()
 
@@ -85,8 +89,9 @@ class CamHandler(BaseHTTPRequestHandler):
 
                         print(f' Sent image: {(time.time() - start_time):.3f}')
 
-                    except socket.error as e:
-                        print(f'Socket error: {e}')
+                    except BrokenPipeError as e:
+                        print(f'Broken Pipe')
+                        break
 
                     except Exception as e:
                         print(f'ERROR: {e}')
@@ -96,6 +101,8 @@ class CamHandler(BaseHTTPRequestHandler):
 
                 print(f' Frame time: {time.time() - frame_marker:.3f}')
                 frame_marker = time.time()
+
+            CamHandler.active_threads -= 1
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
