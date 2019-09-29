@@ -86,7 +86,8 @@ class FoggyCam(object):
             utc_millis_str = str(int(utc_date.timestamp())*1000)
             self.initialize_twof_session(utc_millis_str)
         except:
-            logging.warning("Failed to re-use the cookies. Re-initializing session...")
+            logging.warning(
+                "Failed to re-use the cookies. Re-initializing session...")
             self.initialize_session()
 
         self.login()
@@ -133,6 +134,9 @@ class FoggyCam(object):
 
             self.nest_access_token = session_json['access_token']
             self.nest_access_token_expiration = session_json['expires_in']
+            logging.warning(
+                f'Captured expiration date for token: {self.nest_access_token_expiration}')
+
             self.nest_user_id = session_json['userid']
 
             self.pickle_cookies()
@@ -163,7 +167,8 @@ class FoggyCam(object):
             logging.info('INFO: [PARSED] Captured authentication token:')
             logging.info(self.nest_access_token)
 
-            logging.warning('INFO: [PARSED] Captured expiration date for token:')
+            logging.warning(
+                'INFO: [PARSED] Captured expiration date for token:')
             logging.warning(self.nest_access_token_expiration)
 
             cookie_data = dict((cookie.name, cookie.value)
@@ -432,7 +437,8 @@ class FoggyCam(object):
                             for buffer_entry in camera_buffer[camera_id]:
                                 deletion_target = os.path.join(
                                     camera_path, buffer_entry + '.jpg')
-                                logging.info('INFO: Deleting ' + deletion_target)
+                                logging.info('INFO: Deleting ' +
+                                             deletion_target)
                                 os.remove(deletion_target)
                     else:
                         logging.info(
@@ -483,7 +489,7 @@ class FoggyCam(object):
 
         except urllib.request.HTTPError as err:
             logging.error(err)
-            
+
             if err.code == 403:
                 self.initialize_session()
                 self.login()

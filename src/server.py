@@ -77,6 +77,10 @@ class CamHandler(BaseHTTPRequestHandler):
             self.end_headers()
             global to_exit
 
+            if not self.cancel_scheduler:
+                self.cancel_scheduler = self.scheduler.enter(
+                    60, 1, self.log_frame_info, (self))
+
             camera_id = self.cam.nest_camera_array[0].get("id")
 
             frame_marker = time.time()
@@ -133,6 +137,9 @@ class CamHandler(BaseHTTPRequestHandler):
                     self.frames_failed += 1
 
             CamHandler.active_threads -= 1
+
+            if CamHandler.active_threads == 0 and self.cancel_scheduler:
+                self.cancel_scheduler()
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):
