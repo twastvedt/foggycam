@@ -16,6 +16,8 @@ from datetime import datetime
 import subprocess
 from subprocess import call
 import shutil
+from socket import gaierror
+import logging
 
 
 class FoggyCam(object):
@@ -84,7 +86,7 @@ class FoggyCam(object):
             utc_millis_str = str(int(utc_date.timestamp())*1000)
             self.initialize_twof_session(utc_millis_str)
         except:
-            print("Failed to re-use the cookies. Re-initializing session...")
+            logging.warning("Failed to re-use the cookies. Re-initializing session...")
             self.initialize_session()
 
         self.login()
@@ -93,7 +95,7 @@ class FoggyCam(object):
     def unpickle_cookies(self):
         """Get local cookies and load them into the cookie jar."""
 
-        print("Unpickling cookies...")
+        logging.info("Unpickling cookies...")
         with open("cookies.bin", 'rb') as f:
             pickled_cookies = pickle.load(f)
 
@@ -108,16 +110,16 @@ class FoggyCam(object):
     def pickle_cookies(self):
         """Store the cookies locally to reduce auth calls."""
 
-        print("Pickling cookies...")
+        logging.info("Pickling cookies...")
         pickle.dump([c for c in self.cookie_jar], open("cookies.bin", "wb"))
 
     def initialize_twof_session(self, time_token):
         """Creates the first session to get the access token and cookie, with 2FA enabled."""
 
-        print("Intializing 2FA session...")
+        logging.info("Intializing 2FA session...")
 
         target_url = self.nest_session_url + "?=_" + time_token
-        print(target_url)
+        logging.info(target_url)
 
         try:
             request = urllib.request.Request(target_url)
@@ -135,12 +137,12 @@ class FoggyCam(object):
 
             self.pickle_cookies()
         except urllib.request.HTTPError as err:
-            print(err)
+            logging.critical(err)
 
     def initialize_session(self):
         """Creates the first session to get the access token and cookie."""
 
-        print('INFO: Initializing session...')
+        logging.info('INFO: Initializing session...')
 
         payload = {'email': self.config["username"],
                    'password': self.config["password"]}
@@ -158,19 +160,19 @@ class FoggyCam(object):
             self.nest_access_token_expiration = session_json['expires_in']
             self.nest_user_id = session_json['userid']
 
-            print('INFO: [PARSED] Captured authentication token:')
-            print(self.nest_access_token)
+            logging.info('INFO: [PARSED] Captured authentication token:')
+            logging.info(self.nest_access_token)
 
-            print('INFO: [PARSED] Captured expiration date for token:')
-            print(self.nest_access_token_expiration)
+            logging.warning('INFO: [PARSED] Captured expiration date for token:')
+            logging.warning(self.nest_access_token_expiration)
 
             cookie_data = dict((cookie.name, cookie.value)
                                for cookie in self.cookie_jar)
             for cookie in cookie_data:
-                print(cookie)
+                logging.info(cookie)
 
-            print('INFO: [COOKIE] Captured authentication token:')
-            print(cookie_data["cztoken"])
+            logging.info('INFO: [COOKIE] Captured authentication token:')
+            logging.info(cookie_data["cztoken"])
 
         except urllib.request.HTTPError as err:
             if err.code == 401:
@@ -229,19 +231,19 @@ class FoggyCam(object):
                         print("Failed 2FA checks. Exiting...")
                         exit()
 
-        print('INFO: Session initialization complete!')
+        logging.warning('Session initialization complete!')
 
     def login(self):
         """Performs user login to get the website_2 cookie."""
 
-        print('INFO: Performing user login...')
+        logging.info('Performing user login...')
 
         post_data = {'access_token': self.nest_access_token}
         post_data = urllib.parse.urlencode(post_data)
         binary_data = post_data.encode('utf-8')
 
-        print("INFO: Auth post data")
-        print(post_data)
+        logging.debug("Auth post data")
+        logging.debug(post_data)
 
         request = urllib.request.Request(
             self.nest_api_login_url, data=binary_data)
@@ -250,17 +252,17 @@ class FoggyCam(object):
         response = self.merlin.open(request)
         session_data = response.read().decode('utf-8')
 
-        print(session_data)
+        logging.debug(session_data)
 
     def initialize_user(self):
         """Gets the assets belonging to Nest user."""
 
-        print('INFO: Initializing current user...')
+        logging.info('Initializing current user...')
 
         user_url = self.nest_user_url.replace('#USERID#', self.nest_user_id)
 
-        print('INFO: Requesting user data from:')
-        print(user_url)
+        logging.info('Requesting user data from:')
+        logging.info(user_url)
 
         binary_data = json.dumps(
             self.nest_user_request_payload).encode('utf-8')
@@ -275,26 +277,28 @@ class FoggyCam(object):
 
         response_data = response.read().decode('utf-8')
 
-        print(response_data)
+        logging.debug(response_data)
 
         user_object = json.loads(response_data)
         for bucket in user_object['updated_buckets']:
             bucket_id = bucket['object_key']
+
             if bucket_id.startswith('quartz.'):
                 camera_id = bucket_id.replace('quartz.', '')
                 camera_description = bucket['value']['description']
-                print('INFO: Detected camera configuration.')
-                print(bucket)
-                print('INFO: Camera UUID:')
-                print(camera_id)
-                print(camera_description)
+
+                logging.info('INFO: Detected camera configuration.')
+                logging.info(bucket)
+                logging.warning(f'INFO: Camera UUID: {camera_id}')
+                logging.info(camera_description)
+
                 self.nest_camera_array.append(
                     {"id": camera_id, "name": camera_description})
 
     def capture_images(self):
         """Starts the multi-threaded image capture process."""
 
-        print('INFO: Capturing images...')
+        logging.info('Capturing images...')
 
         self.is_capturing = True
 
@@ -369,7 +373,7 @@ class FoggyCam(object):
             # Check if we need to compile a video
             if self.config["produce_video"]:
                 camera_buffer_size = len(camera_buffer[camera_id])
-                print('[', threading.current_thread(
+                logging.info('[', threading.current_thread(
                 ).name, '] INFO: Camera buffer size for ', camera_id, ': ', camera_buffer_size)
 
                 if camera_buffer_size < self.nest_camera_buffer_threshold:
@@ -403,24 +407,24 @@ class FoggyCam(object):
                             os.path.dirname(__file__), '..', 'tools', 'ffmpeg'))
 
                     if use_terminal or (os.path.isfile(ffmpeg_path) and use_terminal is False):
-                        print('INFO: Found ffmpeg. Processing video!')
+                        logging.info('INFO: Found ffmpeg. Processing video!')
                         target_video_path = os.path.join(
                             video_path, file_id + '.mp4')
                         process = Popen([ffmpeg_path, '-r', str(self.config["frame_rate"]), '-f', 'concat', '-safe', '0', '-i', concat_file_name,
                                          '-vcodec', 'libx264', '-crf', '25', '-pix_fmt', 'yuv420p', target_video_path], stdout=PIPE, stderr=PIPE)
                         process.communicate()
                         os.remove(concat_file_name)
-                        print('INFO: Video processing is complete!')
+                        logging.info('INFO: Video processing is complete!')
 
                         # Upload the video
                         storage_provider = AzureStorageProvider()
 
                         if bool(self.config["upload_to_azure"]):
-                            print('INFO: Uploading to Azure Storage...')
+                            logging.info('INFO: Uploading to Azure Storage...')
                             target_blob = 'foggycam/' + camera_id + '/' + file_id + '.mp4'
                             storage_provider.upload_video(
                                 account_name=self.config["az_account_name"], sas_token=self.config["az_sas_token"], container='foggycam', blob=target_blob, path=target_video_path)
-                            print('INFO: Upload complete.')
+                            logging.info('INFO: Upload complete.')
 
                         # If the user specified the need to remove images post-processing
                         # then clear the image folder from images in the buffer.
@@ -428,10 +432,10 @@ class FoggyCam(object):
                             for buffer_entry in camera_buffer[camera_id]:
                                 deletion_target = os.path.join(
                                     camera_path, buffer_entry + '.jpg')
-                                print('INFO: Deleting ' + deletion_target)
+                                logging.info('INFO: Deleting ' + deletion_target)
                                 os.remove(deletion_target)
                     else:
-                        print(
+                        logging.info(
                             'WARNING: No ffmpeg detected. Make sure the binary is in /tools.')
 
                     # Empty buffer, since we no longer need the file records that we're planning
@@ -444,7 +448,7 @@ class FoggyCam(object):
         utc_date = datetime.utcnow()
         utc_millis_str = str(int(utc_date.timestamp())*1000)
 
-        # print('Applied cache buster: ', utc_millis_str)
+        logging.debug('Applied cache buster: ', utc_millis_str)
 
         image_url = self.nest_image_url.replace('#CAMERAID#', camera_id).replace(
             '#CBUSTER#', utc_millis_str).replace('#WIDTH#', str(self.config["width"]))
@@ -465,12 +469,12 @@ class FoggyCam(object):
             if self.last_frame:
                 actual_frame_time = time.time() - self.last_frame
 
-                print(f' Since last: {actual_frame_time:.3f}')
+                logging.debug(f' Since last: {actual_frame_time:.3f}')
 
                 sleep_time = self.frame_time - actual_frame_time
 
                 if sleep_time > 0:
-                    print(f' Sleep:      {sleep_time:.3f}')
+                    logging.debug(f' Sleep:      {sleep_time:.3f}')
                     time.sleep(sleep_time)
 
             self.last_frame = time.time()
@@ -478,6 +482,8 @@ class FoggyCam(object):
             return response
 
         except urllib.request.HTTPError as err:
+            logging.error(err)
+            
             if err.code == 403:
                 self.initialize_session()
                 self.login()
@@ -485,9 +491,18 @@ class FoggyCam(object):
 
             self.last_frame = None
 
-        except Exception:
-            print(f'ERROR: Could not download image from URL: {image_url}')
+        except gaierror as err:
+            logging.error(err)
 
-            traceback.print_exc()
+            self.initialize_session()
+            self.login()
+            self.initialize_user()
+
+            self.last_frame = None
+
+        except Exception as err:
+            logging.error(err)
+
+            logging.debug(traceback.format_exc())
 
             self.last_frame = None

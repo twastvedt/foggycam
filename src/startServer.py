@@ -10,7 +10,7 @@ print('Welcome to FoggyCam 1.0 - Nest video/image capture tool')
 
 CONFIG_PATH = os.path.abspath(os.path.join(
     os.path.dirname(__file__), '..', 'config.json'))
-print(CONFIG_PATH)
+logging.info(f'Config file: {CONFIG_PATH}')
 
 CONFIG = json.load(open(CONFIG_PATH), object_hook=lambda d: namedtuple(
     'X', d.keys())(*d.values()))
@@ -27,12 +27,17 @@ server = ThreadedHTTPServer((ip, port), CamHandler)
 
 
 def quit(sig, frame):
-    print("Exiting startServer...")
+    logging.warning("Exiting startServer...")
     global server
     server.socket.close()
+
+    if CamHandler.cam.cancel_scheduler:
+        CamHandler.cam.cancel_scheduler()
+
     exit(0)
 
 
 print("Server started at " + ip + ':' + str(port))
 print('Find video at http://127.0.0.1:8080')
+
 server.serve_forever()

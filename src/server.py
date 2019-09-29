@@ -9,6 +9,9 @@ import urllib.request
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn, socket
 from urllib.parse import urlparse, parse_qs
+import logging
+import sched
+import time
 
 to_exit = False
 
@@ -27,7 +30,24 @@ class CamHandler(BaseHTTPRequestHandler):
 
     active_threads = 0
 
+    frames_successful = 0
+    frames_failed = 0
+
+    scheduler = sched.scheduler(time.time, time.sleep)
+
+    cancel_scheduler = None
+
     cam = None
+
+    def log_frame_info(self):
+        self.cancel_scheduler = self.scheduler.enter(
+            60, 1, self.log_frame_info, (self))
+
+        logging.warning(
+            f'{self.frames_successful} successful frames, {self.frames_failed} failed.')
+
+        self.frames_failed = 0
+        self.frames_successful = 0
 
     def do_GET(self):
 
@@ -42,7 +62,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
             for key, value in query_components.items():
                 if key == 'fps':
-                    message = f'Set framerate to {value[0]}'
+                    message = f'Set framerate to {value[0]}\n'
                     print(message)
                     self.wfile.write(str.encode(message))
 
@@ -62,14 +82,16 @@ class CamHandler(BaseHTTPRequestHandler):
             frame_marker = time.time()
 
             while not to_exit:
+                success = False
 
-                print(f'\nStart frame ({CamHandler.active_threads} threads)')
+                logging.info(
+                    f'\nStart frame ({CamHandler.active_threads} threads)')
 
                 start_time = time.time()
 
                 response = self.cam.get_image(camera_id)
 
-                print(f' Got image:  {(time.time() - start_time):.3f}')
+                logging.info(f' Got image:  {(time.time() - start_time):.3f}')
 
                 start_time = time.time()
 
@@ -87,20 +109,28 @@ class CamHandler(BaseHTTPRequestHandler):
                                 break
                             self.wfile.write(data)
 
-                        print(f' Sent image: {(time.time() - start_time):.3f}')
+                        logging.info(
+                            f' Sent image: {(time.time() - start_time):.3f}')
+
+                        success = True
 
                     except BrokenPipeError as e:
-                        print(f'Broken Pipe')
+                        logging.error(f'Broken Pipe')
                         break
 
                     except Exception as e:
-                        print(f'ERROR: {e}')
+                        logging.error(e)
 
                 else:
-                    print('Empty response')
+                    logging.error('Empty response')
 
-                print(f' Frame time: {time.time() - frame_marker:.3f}')
+                logging.info(f' Frame time: {time.time() - frame_marker:.3f}')
                 frame_marker = time.time()
+
+                if success:
+                    self.frames_successful += 1
+                else:
+                    self.frames_failed += 1
 
             CamHandler.active_threads -= 1
 
