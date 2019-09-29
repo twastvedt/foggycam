@@ -5,6 +5,7 @@ import os
 from collections import namedtuple
 from foggycam import FoggyCam
 from server import CamHandler, ThreadedHTTPServer
+import logging
 
 print('Welcome to FoggyCam 1.0 - Nest video/image capture tool')
 
