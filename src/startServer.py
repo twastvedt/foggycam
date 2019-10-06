@@ -4,7 +4,7 @@ import json
 import os
 from collections import namedtuple
 from foggycam import FoggyCam
-import server
+from server import CamHandler, ThreadedHTTPServer
 import logging
 import signal
 
@@ -31,12 +31,12 @@ server.CamHandler.cam = CAM
 
 ip = '0.0.0.0'
 port = 8080
-http_server = server.ThreadedHTTPServer((ip, port), server.CamHandler)
+http_server = ThreadedHTTPServer((ip, port), CamHandler)
 
 
 def quit(sig, frame):
     logging.warning("Exiting startServer...")
-    server.to_exit = True
+    CamHandler.to_exit = True
     #global http_server
     # http_server.shutdown()
 

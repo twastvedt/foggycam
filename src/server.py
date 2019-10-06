@@ -13,18 +13,6 @@ import logging
 import time
 from threading import Thread, Event
 
-to_exit = False
-
-
-def quit(sig, frame):
-    print("Exiting server...")
-    global to_exit
-    to_exit = True
-    exit(0)
-
-
-signal.signal(signal.SIGINT, quit)
-
 
 class ServerStatus(Thread):
     function = None
@@ -42,6 +30,8 @@ class ServerStatus(Thread):
 
 
 class CamHandler(BaseHTTPRequestHandler):
+
+    to_exit = False
 
     log_delay = 30
 
@@ -99,8 +89,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
             frame_marker = time.time()
 
-            global to_exit
-            while not to_exit:
+            while not CamHandler.to_exit:
                 success = False
 
                 logging.info(
