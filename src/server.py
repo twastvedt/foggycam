@@ -10,8 +10,8 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn, socket
 from urllib.parse import urlparse, parse_qs
 import logging
-import sched
 import time
+from threading import Thread, Event
 
 to_exit = False
 
@@ -26,32 +26,46 @@ def quit(sig, frame):
 signal.signal(signal.SIGINT, quit)
 
 
+class ServerStatus(Thread):
+    function = None
+    delay = 30
+
+    def __init__(self, event, delay, function):
+        Thread.__init__(self, daemon=True)
+        self.stopped = event
+        self.delay = delay
+        self.function = function
+
+    def run(self):
+        while not self.stopped.wait(self.delay):
+            self.function()
+
+
 class CamHandler(BaseHTTPRequestHandler):
 
+    log_delay = 30
+
     active_threads = 0
+
+    cancel_timer = Event()
 
     frames_successful = 0
     frames_failed = 0
 
-    scheduler = sched.scheduler(time.time, time.sleep)
-
-    cancel_scheduler = None
+    timer = None
 
     cam = None
 
     def log_frame_info(self):
-        self.cancel_scheduler = self.scheduler.enter(
-            60, 1, self.log_frame_info, (self))
-
         logging.warning(
-            f'{self.frames_successful} successful frames, {self.frames_failed} failed.')
+            f'In {self.log_delay} seconds, {self.frames_successful} successful frames, {self.frames_failed} failed. {self.active_threads} active thread(s).')
 
         self.frames_failed = 0
         self.frames_successful = 0
 
     def do_GET(self):
 
-        print(f'Received GET request: {self.path}')
+        logging.warning(f'Received GET request: {self.path}')
 
         url_parts = urlparse(self.path)
 
@@ -62,29 +76,30 @@ class CamHandler(BaseHTTPRequestHandler):
 
             for key, value in query_components.items():
                 if key == 'fps':
-                    message = f'Set framerate to {value[0]}\n'
-                    print(message)
+                    message = f'Set framerate to {value[0]}.\n'
+                    logging.warning(message)
                     self.wfile.write(str.encode(message))
 
                     self.cam.set_framerate(float(value[0]))
 
         elif url_parts.path.endswith('video'):
-            CamHandler.active_threads += 1
+            if not self.timer:
+                self.timer = ServerStatus(
+                    self.cancel_timer, self.log_delay, lambda: self.log_frame_info())
+                self.timer.start()
+
+            self.active_threads += 1
 
             self.send_response(200)
             self.send_header(
                 'Content-type', 'multipart/x-mixed-replace; boundary=jpgboundary')
             self.end_headers()
-            global to_exit
-
-            if not self.cancel_scheduler:
-                self.cancel_scheduler = self.scheduler.enter(
-                    60, 1, self.log_frame_info, (self))
 
             camera_id = self.cam.nest_camera_array[0].get("id")
 
             frame_marker = time.time()
 
+            global to_exit
             while not to_exit:
                 success = False
 
@@ -123,10 +138,10 @@ class CamHandler(BaseHTTPRequestHandler):
                         break
 
                     except Exception as e:
-                        logging.error(e)
+                        logging.info('Server exception', exc_info=e)
 
                 else:
-                    logging.error('Empty response')
+                    logging.info('Empty response')
 
                 logging.info(f' Frame time: {time.time() - frame_marker:.3f}')
                 frame_marker = time.time()
@@ -136,10 +151,12 @@ class CamHandler(BaseHTTPRequestHandler):
                 else:
                     self.frames_failed += 1
 
-            CamHandler.active_threads -= 1
+            self.active_threads -= 1
 
-            if CamHandler.active_threads == 0 and self.cancel_scheduler:
-                self.cancel_scheduler()
+            logging.warning('Ending server loop')
+
+            if self.active_threads == 0 and self.cancel_timer:
+                self.cancel_timer.set()
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):

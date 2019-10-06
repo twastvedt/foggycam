@@ -146,7 +146,7 @@ class FoggyCam(object):
     def initialize_session(self):
         """Creates the first session to get the access token and cookie."""
 
-        logging.info('INFO: Initializing session...')
+        logging.info('Initializing session...')
 
         payload = {'email': self.config["username"],
                    'password': self.config["password"]}
@@ -164,20 +164,19 @@ class FoggyCam(object):
             self.nest_access_token_expiration = session_json['expires_in']
             self.nest_user_id = session_json['userid']
 
-            logging.info('INFO: [PARSED] Captured authentication token:')
-            logging.info(self.nest_access_token)
+            logging.debug(
+                f'Captured authentication token: {self.nest_access_token}')
 
             logging.warning(
-                'INFO: [PARSED] Captured expiration date for token:')
-            logging.warning(self.nest_access_token_expiration)
+                f'Captured expiration date for token: {self.nest_access_token_expiration}')
 
             cookie_data = dict((cookie.name, cookie.value)
                                for cookie in self.cookie_jar)
             for cookie in cookie_data:
                 logging.info(cookie)
 
-            logging.info('INFO: [COOKIE] Captured authentication token:')
-            logging.info(cookie_data["cztoken"])
+            logging.debug(
+                f'[COOKIE] Captured authentication token: {cookie_data["cztoken"]}')
 
         except urllib.request.HTTPError as err:
             if err.code == 401:
@@ -219,9 +218,8 @@ class FoggyCam(object):
                             cookie_data = dict((cookie.name, cookie.value)
                                                for cookie in self.cookie_jar)
 
-                            print(
-                                'INFO: [COOKIE] Captured authentication token:')
-                            print(cookie_data["cztoken"])
+                            logging.debug(
+                                f'[COOKIE] Captured authentication token: {cookie_data["cztoken"]}')
 
                             self.nest_access_token = parsed_pin_attempt['access_token']
 
@@ -236,7 +234,7 @@ class FoggyCam(object):
                         print("Failed 2FA checks. Exiting...")
                         exit()
 
-        logging.warning('Session initialization complete!')
+        logging.info('Session initialization complete!')
 
     def login(self):
         """Performs user login to get the website_2 cookie."""
@@ -247,8 +245,7 @@ class FoggyCam(object):
         post_data = urllib.parse.urlencode(post_data)
         binary_data = post_data.encode('utf-8')
 
-        logging.debug("Auth post data")
-        logging.debug(post_data)
+        logging.debug(f'Auth post data: {post_data}')
 
         request = urllib.request.Request(
             self.nest_api_login_url, data=binary_data)
@@ -266,8 +263,7 @@ class FoggyCam(object):
 
         user_url = self.nest_user_url.replace('#USERID#', self.nest_user_id)
 
-        logging.info('Requesting user data from:')
-        logging.info(user_url)
+        logging.debug(f'Requesting user data from: {user_url}')
 
         binary_data = json.dumps(
             self.nest_user_request_payload).encode('utf-8')
@@ -292,10 +288,9 @@ class FoggyCam(object):
                 camera_id = bucket_id.replace('quartz.', '')
                 camera_description = bucket['value']['description']
 
-                logging.info('INFO: Detected camera configuration.')
-                logging.info(bucket)
-                logging.warning(f'INFO: Camera UUID: {camera_id}')
-                logging.info(camera_description)
+                logging.debug(f'Detected camera configuration: {bucket}')
+                logging.info(f'Camera UUID: {camera_id}')
+                logging.debug(camera_description)
 
                 self.nest_camera_array.append(
                     {"id": camera_id, "name": camera_description})
@@ -488,17 +483,19 @@ class FoggyCam(object):
             return response
 
         except urllib.request.HTTPError as err:
-            logging.error(err)
-
             if err.code == 403:
+                logging.error('HTTP 403 Error')
+
                 self.initialize_session()
                 self.login()
                 self.initialize_user()
+            else:
+                logging.info(err)
 
             self.last_frame = None
 
         except gaierror as err:
-            logging.error(err)
+            logging.error('gaierror', exc_info=err)
 
             self.initialize_session()
             self.login()
@@ -507,8 +504,6 @@ class FoggyCam(object):
             self.last_frame = None
 
         except Exception as err:
-            logging.error(err)
-
-            logging.debug(traceback.format_exc())
+            logging.info(err, exc_info=True)
 
             self.last_frame = None
