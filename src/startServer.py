@@ -27,7 +27,7 @@ CAM = FoggyCam(CONFIG)
 
 CAM.start()
 
-server.CamHandler.cam = CAM
+CamHandler.cam = CAM
 
 ip = '0.0.0.0'
 port = 8080
