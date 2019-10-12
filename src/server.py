@@ -48,10 +48,10 @@ class CamHandler(BaseHTTPRequestHandler):
 
     def log_frame_info(self):
         logging.warning(
-            f'In {self.log_delay} seconds, {self.frames_successful} successful frames, {self.frames_failed} failed. {self.active_threads} active thread(s).')
+            f'In {self.log_delay} seconds, {CamHandler.frames_successful} successful frames, {CamHandler.frames_failed} failed. {CamHandler.active_threads} active thread(s).')
 
-        self.frames_failed = 0
-        self.frames_successful = 0
+        CamHandler.frames_failed = 0
+        CamHandler.frames_successful = 0
 
     def do_GET(self):
 
@@ -78,7 +78,7 @@ class CamHandler(BaseHTTPRequestHandler):
                     self.cancel_timer, self.log_delay, lambda: self.log_frame_info())
                 self.timer.start()
 
-            self.active_threads += 1
+            CamHandler.active_threads += 1
 
             self.send_response(200)
             self.send_header(
@@ -136,15 +136,15 @@ class CamHandler(BaseHTTPRequestHandler):
                 frame_marker = time.time()
 
                 if success:
-                    self.frames_successful += 1
+                    CamHandler.frames_successful += 1
                 else:
-                    self.frames_failed += 1
+                    CamHandler.frames_failed += 1
 
-            self.active_threads -= 1
+            CamHandler.active_threads -= 1
 
             logging.warning('Ending server loop')
 
-            if self.active_threads == 0 and self.cancel_timer:
+            if CamHandler.active_threads == 0 and self.cancel_timer:
                 self.cancel_timer.set()
 
 
