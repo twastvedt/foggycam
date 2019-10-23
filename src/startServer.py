@@ -7,6 +7,7 @@ from foggycam import FoggyCam
 from server import CamHandler, ThreadedHTTPServer
 import logging
 import signal
+import threading
 
 
 LOGLEVEL = os.environ.get('LOGLEVEL', 'WARNING').upper()
@@ -31,21 +32,18 @@ CamHandler.cam = CAM
 
 ip = '0.0.0.0'
 port = 8080
-http_server = ThreadedHTTPServer((ip, port), CamHandler)
 
-
-def quit(sig, frame):
-    logging.warning("Exiting startServer...")
-    CamHandler.to_exit = True
-    #global http_server
-    # http_server.shutdown()
-
-    exit(0)
-
-
-signal.signal(signal.SIGINT, quit)
+server = ThreadedHTTPServer((ip, port), CamHandler)
+server_thread = threading.Thread(target=server.serve_forever)
+# Exit the server thread when the main thread terminates
+server_thread.daemon = True
+server_thread.start()
 
 print("Server started at " + ip + ':' + str(port))
 print('Find video at http://127.0.0.1:8080')
 
-http_server.serve_forever()
+input("Press Enter to exit...")
+
+CamHandler.to_exit = True
+server.shutdown()
+server.server_close()

@@ -85,9 +85,12 @@ class CamHandler(BaseHTTPRequestHandler):
                 'Content-type', 'multipart/x-mixed-replace; boundary=jpgboundary')
             self.end_headers()
 
-            camera_id = self.cam.nest_camera_array[0].get("id")
-
             frame_marker = time.time()
+
+            if not self.cam.is_capturing:
+                self.cam.capture_images()
+
+            last_frame = None
 
             while not CamHandler.to_exit:
                 success = False
@@ -97,25 +100,23 @@ class CamHandler(BaseHTTPRequestHandler):
 
                 start_time = time.time()
 
-                response = self.cam.get_image(camera_id)
+                if last_frame == self.cam.current_frame:
+                    self.cam.new_frame_event.wait()
+
+                last_frame = self.cam.current_frame
 
                 logging.info(f' Got image:  {(time.time() - start_time):.3f}')
 
                 start_time = time.time()
 
-                if response:
+                if self.cam.image:
                     try:
                         self.wfile.write(str.encode("\r\n--jpgboundary\r\n"))
                         self.send_header('Content-type', 'image/jpeg')
-                        self.send_header('Content-length', response.length)
+                        self.send_header('Content-length', len(self.cam.image))
                         self.end_headers()
 
-                        while True:
-                            data = response.read(32768)
-
-                            if data is None or len(data) == 0:
-                                break
-                            self.wfile.write(data)
+                        self.wfile.write(self.cam.image)
 
                         logging.info(
                             f' Sent image: {(time.time() - start_time):.3f}')
@@ -126,8 +127,13 @@ class CamHandler(BaseHTTPRequestHandler):
                         logging.error(f'Broken Pipe')
                         break
 
+                    except ConnectionAbortedError as e:
+                        logging.error(f'Connection Aborted')
+                        break
+
                     except Exception as e:
-                        logging.info('Server exception', exc_info=e)
+                        logging.error('Unknown exception', exc_info=e)
+                        break
 
                 else:
                     logging.info('Empty response')

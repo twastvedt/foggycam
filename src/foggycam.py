@@ -16,7 +16,7 @@ from datetime import datetime
 import subprocess
 from subprocess import call
 import shutil
-from socket import gaierror
+from socket import gaierror, timeout
 import logging
 
 
@@ -46,10 +46,15 @@ class FoggyCam(object):
     cookie_jar = None
     merlin = None
 
+    image = None
+
+    image_thread = None
+
     last_frame = None
     frame_time = None
     start_time = None
-    frame_count = 0
+    current_frame = 0
+    new_frame_event = threading.Event()
 
     config = None
 
@@ -296,22 +301,47 @@ class FoggyCam(object):
 
         self.nest_camera_buffer_threshold = self.config["threshold"]
 
+        camera_id = self.nest_camera_array[0].get("id")
 
+        # TODO: Handle multiple cameras. Currently just uses the first.
+        self.image_thread = threading.Thread(
+            target=self.perform_capture, args=[camera_id])
+        self.image_thread.daemon = True
+        self.image_thread.start()
 
+    def perform_capture(self, camera_id=None):
+        """Get images."""
 
-            image_thread = threading.Thread(
-                target=self.perform_capture, args=(camera_id, camera_path, video_path))
-            image_thread.daemon = True
-            image_thread.start()
+        self.current_frame = 0
 
-        while True:
-            time.sleep(1)
+        while self.is_capturing:
+            self.new_frame_event.clear()
 
-    def perform_capture(self, camera_id=None, camera_path='', video_path=''):
-        """Save image and video files."""
+            try:
+                response = self.get_image(camera_id)
+                self.image = response.read()
+                # TODO: loop and read response into a buffer that is read as it is written by multiple threads. This would reduce lag, not sure if that's an issue yet.
+                # Would need to keep two buffers on hand (I think), so that threads can finish reading from the old one if foggycam has moved on to write to the new one.
 
-        camera_buffer = defaultdict(list)
+            except timeout as e:
+                continue
 
+            except Exception as e:
+                logging.warning("Capture error", exc_info=e)
+                continue
+
+            self.current_frame += 1
+
+            self.new_frame_event.set()
+
+    def stop(self):
+        if self.image_thread:
+            self.image_thread.stop()
+            self.image_thread = None
+
+            self.new_frame_event.clear()
+
+            self.is_capturing = False
 
     def get_image(self, camera_id=None):
         """Generate image from cam."""
@@ -333,8 +363,6 @@ class FoggyCam(object):
         request.add_header('authority', 'nexusapi-us1.camera.home.nest.com')
 
         try:
-            self.frame_count += 1
-
             response = self.merlin.open(request, timeout=3)
 
             if self.last_frame:
