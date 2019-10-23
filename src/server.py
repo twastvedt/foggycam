@@ -47,8 +47,12 @@ class CamHandler(BaseHTTPRequestHandler):
     cam = None
 
     def log_frame_info(self):
-        logging.warning(
-            f'In {self.log_delay} seconds, {CamHandler.frames_successful} successful frames, {CamHandler.frames_failed} failed. {CamHandler.active_threads} active thread(s).')
+        message = f'In {self.log_delay} seconds, {CamHandler.frames_successful} successful frames, {CamHandler.frames_failed} failed. {CamHandler.active_threads} active thread(s).'
+
+        if CamHandler.frames_failed > 5 or CamHandler.active_threads > 1 or CamHandler.frames_successful < 20:
+            logging.warning(f'Anomaly: {message}')
+        else:
+            logging.info(message)
 
         CamHandler.frames_failed = 0
         CamHandler.frames_successful = 0
@@ -96,7 +100,7 @@ class CamHandler(BaseHTTPRequestHandler):
             while not CamHandler.to_exit:
                 success = False
 
-                logging.info(
+                logging.debug(
                     f'\nStart frame ({CamHandler.active_threads} threads)')
 
                 start_time = time.time()
@@ -106,7 +110,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
                 last_frame = self.cam.current_frame
 
-                logging.info(f' Got image:  {(time.time() - start_time):.3f}')
+                logging.debug(f' Got image:  {(time.time() - start_time):.3f}')
 
                 start_time = time.time()
 
@@ -119,7 +123,7 @@ class CamHandler(BaseHTTPRequestHandler):
 
                         self.wfile.write(self.cam.image)
 
-                        logging.info(
+                        logging.debug(
                             f' Sent image: {(time.time() - start_time):.3f}')
 
                         success = True
@@ -139,7 +143,7 @@ class CamHandler(BaseHTTPRequestHandler):
                 else:
                     logging.info('Empty response')
 
-                logging.info(f' Frame time: {time.time() - frame_marker:.3f}')
+                logging.debug(f' Frame time: {time.time() - frame_marker:.3f}')
                 frame_marker = time.time()
 
                 if success:
