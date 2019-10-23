@@ -76,7 +76,8 @@ class CamHandler(BaseHTTPRequestHandler):
             if not self.timer:
                 self.timer = ServerStatus(
                     self.cancel_timer, self.log_delay, lambda: self.log_frame_info())
-                self.timer.start()
+
+            self.timer.start()
 
             CamHandler.active_threads += 1
 

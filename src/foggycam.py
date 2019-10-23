@@ -319,9 +319,15 @@ class FoggyCam(object):
 
             try:
                 response = self.get_image(camera_id)
-                self.image = response.read()
-                # TODO: loop and read response into a buffer that is read as it is written by multiple threads. This would reduce lag, not sure if that's an issue yet.
-                # Would need to keep two buffers on hand (I think), so that threads can finish reading from the old one if foggycam has moved on to write to the new one.
+
+                if response:
+                    self.image = response.read()
+                    # TODO: loop and read response into a buffer that is read as it is written by multiple threads. This would reduce lag, not sure if that's an issue yet.
+                    # Would need to keep two buffers on hand (I think), so that threads can finish reading from the old one if foggycam has moved on to write to the new one.
+
+                    self.current_frame += 1
+
+                    self.new_frame_event.set()
 
             except timeout as e:
                 continue
@@ -329,10 +335,6 @@ class FoggyCam(object):
             except Exception as e:
                 logging.warning("Capture error", exc_info=e)
                 continue
-
-            self.current_frame += 1
-
-            self.new_frame_event.set()
 
     def stop(self):
         if self.image_thread:
