@@ -46,8 +46,9 @@ class CamHandler(BaseHTTPRequestHandler):
 
     cam = None
 
-    def log_frame_info(self):
-        message = f'In {self.log_delay} seconds, {CamHandler.frames_successful} successful frames, {CamHandler.frames_failed} failed. {CamHandler.active_threads} active thread(s).'
+    @staticmethod
+    def log_frame_info():
+        message = f'In {CamHandler.log_delay} seconds, {CamHandler.frames_successful} successful frames, {CamHandler.frames_failed} failed. {CamHandler.active_threads} active thread(s).'
 
         if CamHandler.frames_failed > 5 or CamHandler.active_threads > 1 or CamHandler.frames_successful < 20:
             logging.warning(f'Anomaly: {message}')
@@ -77,11 +78,11 @@ class CamHandler(BaseHTTPRequestHandler):
                     self.cam.set_framerate(float(value[0]))
 
         elif url_parts.path.endswith('video'):
-            if not self.timer:
-                self.timer = ServerStatus(
-                    self.cancel_timer, self.log_delay, lambda: self.log_frame_info())
+            if not CamHandler.timer:
+                CamHandler.timer = ServerStatus(
+                    CamHandler.cancel_timer, CamHandler.log_delay, lambda: CamHandler.log_frame_info())
 
-            self.timer.start()
+            CamHandler.timer.start()
 
             CamHandler.active_threads += 1
 
@@ -155,8 +156,9 @@ class CamHandler(BaseHTTPRequestHandler):
 
             logging.warning('Ending server loop')
 
-            if CamHandler.active_threads == 0 and self.cancel_timer:
-                self.cancel_timer.set()
+            if CamHandler.active_threads == 0 and CamHandler.cancel_timer:
+                CamHandler.cancel_timer.set()
+                logging.info('Last remaining thread: cancelling timer.')
 
 
 class ThreadedHTTPServer(ThreadingMixIn, HTTPServer):

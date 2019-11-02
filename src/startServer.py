@@ -42,7 +42,7 @@ server_thread.start()
 print("Server started at " + ip + ':' + str(port))
 print('Find video at http://127.0.0.1:8080')
 
-input("Press Enter to exit...")
+input("Press Enter to exit...\n")
 
 CamHandler.to_exit = True
 server.shutdown()
