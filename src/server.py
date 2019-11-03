@@ -82,7 +82,7 @@ class CamHandler(BaseHTTPRequestHandler):
                 CamHandler.timer = ServerStatus(
                     CamHandler.cancel_timer, CamHandler.log_delay, lambda: CamHandler.log_frame_info())
 
-            CamHandler.timer.start()
+                CamHandler.timer.start()
 
             CamHandler.active_threads += 1
 
